@@ -1,5 +1,8 @@
 import { Resend } from 'resend';
 
+// Base URL for emails - use environment variable or fallback to production
+const getBaseUrl = () => process.env.NEXT_PUBLIC_APP_URL || 'https://spordateur.com';
+
 // Initialize Resend client
 const getResend = () => {
   const apiKey = process.env.RESEND_API_KEY;
