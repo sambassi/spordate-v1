@@ -976,7 +976,7 @@ END:VCALENDAR`;
                 variant="outline"
                 className="border-gray-700"
                 onClick={() => {
-                  const msg = encodeURIComponent(`Découvre ${selectedPartner?.name} sur Spordateur ! 💪\nhttps://spordateur.com/discovery`);
+                  const msg = encodeURIComponent(`Découvre ${selectedPartner?.name} sur Spordateur ! 💪\n${window.location.origin}/discovery`);
                   window.open(`https://wa.me/?text=${msg}`, '_blank');
                 }}
               >
