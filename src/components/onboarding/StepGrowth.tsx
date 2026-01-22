@@ -7,7 +7,7 @@ import type { StepGrowthProps } from "./types";
 
 export function StepGrowth({ referralCode, onGoToProfile }: StepGrowthProps) {
   const { toast } = useToast();
-  const shareUrl = `https://spordateur.com?ref=${referralCode}`;
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}?ref=${referralCode}` : `https://spordateur.com?ref=${referralCode}`;
 
   const shareReferralLink = async () => {
     const shareText = `Rejoins-moi sur Spordate pour trouver des partenaires de sport ! 🏃‍♂️🎾`;
