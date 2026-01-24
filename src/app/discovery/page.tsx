@@ -1115,7 +1115,9 @@ END:VCALENDAR`;
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Montant</span>
-                  <span className="text-green-400 font-semibold">{lastBooking?.amount}€</span>
+                  <span className="text-green-400 font-semibold">
+                    {lastBooking?.amount === 0 ? 'Gratuit' : `${lastBooking?.amount}€`}
+                  </span>
                 </div>
               </div>
             </div>
