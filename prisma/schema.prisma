@@ -1,0 +1,56 @@
+// Prisma Schema for Spordateur
+// Database: MongoDB Atlas
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Booking {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Stripe info
+  sessionId     String   @unique
+  paymentStatus String   @default("pending") // pending, paid, failed
+  
+  // User info
+  userId        String
+  userEmail     String?
+  
+  // Partner/Profile info
+  profileId     String
+  profileName   String
+  sport         String   @default("Afroboost")
+  
+  // Venue info
+  partnerId     String?
+  partnerName   String?
+  partnerAddress String?
+  
+  // Ticket info
+  ticketType    String   @default("solo") // solo, duo
+  amount        Float    @default(25)
+  currency      String   @default("EUR")
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Session date (when the sport session will happen)
+  sessionDate   DateTime?
+}
+
+model Partner {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  address     String
+  city        String
+  type        String   @default("gym")
+  referralId  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
