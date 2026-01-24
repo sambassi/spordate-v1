@@ -257,7 +257,59 @@ export default function DiscoveryPage() {
 
     const paymentStatus = searchParams.get('payment');
     const sessionId = searchParams.get('session_id');
+    const isFreeBooking = searchParams.get('free') === 'true';
 
+    // Handle FREE booking success (no Stripe, no session_id)
+    if (paymentStatus === 'success' && isFreeBooking) {
+      console.log('[Discovery] Free booking success detected');
+      
+      const pendingBooking = localStorage.getItem('pending_booking');
+      if (pendingBooking) {
+        const booking = JSON.parse(pendingBooking);
+        
+        // Create booking record
+        const newBooking = {
+          id: `free_${Date.now()}`,
+          profile: booking.profileName,
+          partner: booking.partnerName || 'Non défini',
+          partnerAddress: booking.partnerAddress || '',
+          isDuo: booking.isDuo,
+          amount: 0,
+          date: new Date().toISOString(),
+        };
+        
+        // Save to bookings history
+        const existingBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+        existingBookings.push(newBooking);
+        localStorage.setItem('bookings', JSON.stringify(existingBookings));
+        
+        // Update confirmed tickets
+        const newTickets = [...confirmedTickets, booking.profileId];
+        setConfirmedTickets(newTickets);
+        localStorage.setItem(TICKETS_STORAGE_KEY, JSON.stringify(newTickets));
+        
+        // Set last booking for success modal
+        setLastBooking(newBooking);
+        localStorage.setItem(LAST_BOOKING_KEY, JSON.stringify(newBooking));
+        
+        // Clean up
+        localStorage.removeItem('pending_booking');
+        
+        // Show success modal
+        setShowSuccessModal(true);
+        
+        toast({
+          title: "Réservation confirmée ! 🎉",
+          description: `Séance gratuite ${booking.isDuo ? 'Duo' : 'Solo'} réservée avec succès`,
+        });
+      }
+      
+      // Clean URL
+      router.replace('/discovery');
+      return;
+    }
+
+    // Handle PAID booking success (Stripe with session_id)
     if (paymentStatus === 'success' && sessionId) {
       // Poll for payment confirmation
       setIsProcessing(true);
