@@ -385,13 +385,14 @@ export default function DiscoveryPage() {
         return;
       }
 
-      // Call Stripe checkout API - use /payment-api to bypass /api routing issues
-      const response = await fetch('/payment-api', {
+      // Call Stripe checkout API
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           packageType: isDuoTicket ? 'duo' : 'solo',
           originUrl: window.location.origin,
+          amount: finalPrice, // Send amount for free session detection
           metadata: {
             profileId: String(currentProfile.id),
             profileName: currentProfile.name.split(',')[0],
@@ -408,10 +409,39 @@ export default function DiscoveryPage() {
         throw new Error(error.error || 'Erreur lors de la création du paiement');
       }
 
-      const { url } = await response.json();
+      const data = await response.json();
       
-      // Redirect to Stripe Checkout
-      window.location.href = url;
+      // If free booking, handle success locally
+      if (data.isFree) {
+        const booking = {
+          id: data.sessionId,
+          profile: currentProfile.name.split(',')[0],
+          partner: meetingPartner?.name || 'Non spécifié',
+          partnerAddress: meetingPartner ? `${meetingPartner.address}, ${meetingPartner.city}` : '',
+          date: new Date().toISOString(),
+          isDuo: isDuoTicket,
+          amount: 0,
+        };
+        
+        const existingBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+        existingBookings.push(booking);
+        localStorage.setItem('bookings', JSON.stringify(existingBookings));
+        
+        setLastBooking(booking);
+        setShowPaymentModal(false);
+        setShowSuccessModal(true);
+        setIsProcessing(false);
+        localStorage.removeItem('pending_booking');
+        
+        toast({
+          title: "Réservation confirmée ! 🎉",
+          description: "Votre séance gratuite a été réservée avec succès.",
+        });
+        return;
+      }
+      
+      // Redirect to Stripe Checkout for paid sessions
+      window.location.href = data.url;
       
     } catch (error) {
       console.error('Payment error:', error);
