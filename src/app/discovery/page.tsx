@@ -300,7 +300,7 @@ export default function DiscoveryPage() {
         
         toast({
           title: "Réservation confirmée ! 🎉",
-          description: `Séance gratuite ${booking.isDuo ? 'Duo' : 'Solo'} réservée avec succès`,
+          description: `Séance d'essai ${booking.isDuo ? 'Duo' : 'Solo'} réservée avec succès`,
         });
       }
       
