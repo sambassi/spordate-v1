@@ -1,0 +1,14 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "devCommand": "next dev --turbopack -p 3000",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": "nextjs",
+  "regions": ["cdg1"],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "STRIPE_SECRET_KEY": "@stripe_secret_key",
+    "STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
+    "STRIPE_WEBHOOK_SECRET": "@stripe_webhook_secret",
+    "NEXT_PUBLIC_APP_URL": "@app_url"
+  }
+}

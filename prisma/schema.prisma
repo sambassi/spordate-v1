@@ -16,6 +16,7 @@ model User {
   name          String?
   referralCode  String?   @unique
   referredBy    String?
+  role          String    @default("user") // user, admin
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
@@ -68,7 +69,23 @@ model Partner {
   city        String
   type        String   @default("gym")
   referralId  String   @unique
-  isActive    Boolean  @default(true)
+  active      Boolean  @default(true) // Changed from isActive to active
+  
+  // New fields for admin management
+  photoUrl    String?
+  mapsUrl     String?
+  priceSolo   Float    @default(25)
+  priceDuo    Float    @default(50)
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model SiteSettings {
+  id                String   @id @default(cuid())
+  key               String   @unique
+  value             String
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

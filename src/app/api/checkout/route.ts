@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getPartnerById } from '@/lib/prisma-helpers';
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Prevent timeout during Stripe session creation
 
-// Fixed packages - NEVER accept amounts from frontend
-const PACKAGES = {
+// Default packages (fallback if no partner selected)
+const DEFAULT_PACKAGES = {
   solo: 25.00,  // 25€
   duo: 50.00,   // 50€
   free: 0,      // Gratuit
 } as const;
 
-type PackageType = keyof typeof PACKAGES;
+type PackageType = keyof typeof DEFAULT_PACKAGES;
 
 // Debug: Log Stripe key status at module load
 console.log('[Checkout API] Module loaded');
@@ -54,12 +55,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine the amount
+    // Determine the amount - PRIORITY: Partner DB > Client Amount > Default Package
     let amount: number;
-    if (packageType && PACKAGES[packageType] !== undefined) {
-      amount = PACKAGES[packageType];
+    
+    // Try to get price from partner database
+    if (metadata.partnerId) {
+      try {
+        const partner = await getPartnerById(metadata.partnerId);
+        if (partner) {
+          amount = packageType === 'duo' ? partner.priceDuo : partner.priceSolo;
+          console.log('[Checkout API] Using partner pricing:', { partnerId: partner.id, amount });
+        } else {
+          // Partner not found, use default
+          amount = DEFAULT_PACKAGES[packageType] || clientAmount || 25;
+        }
+      } catch (error) {
+        console.error('[Checkout API] Error fetching partner:', error);
+        amount = DEFAULT_PACKAGES[packageType] || clientAmount || 25;
+      }
     } else if (typeof clientAmount === 'number') {
       amount = clientAmount;
+    } else if (packageType && DEFAULT_PACKAGES[packageType] !== undefined) {
+      amount = DEFAULT_PACKAGES[packageType];
     } else {
       console.log('[Checkout API] Invalid package type:', packageType);
       return NextResponse.json(
@@ -68,7 +85,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Checkout API] Processing payment:', { packageType, amount, originUrl });
+    console.log('[Checkout API] Processing payment:', { packageType, amount, originUrl, partnerId: metadata.partnerId });
 
     // LOGIC: If amount is 0, skip Stripe and return success directly
     if (amount === 0) {
