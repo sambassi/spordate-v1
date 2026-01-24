@@ -432,7 +432,7 @@ export default function DiscoveryPage() {
         
         toast({
           title: "Réservation confirmée ! 🎉",
-          description: "Votre séance gratuite a été réservée avec succès.",
+          description: "Votre séance d'essai a été réservée avec succès.",
         });
         return;
       }
@@ -487,7 +487,7 @@ export default function DiscoveryPage() {
         
         toast({
           title: "Réservation confirmée ! 🎉",
-          description: "Votre séance gratuite a été réservée avec succès.",
+          description: "Votre séance d'essai a été réservée avec succès.",
         });
         return;
       }
