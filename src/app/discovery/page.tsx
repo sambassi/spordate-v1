@@ -437,6 +437,9 @@ export default function DiscoveryPage() {
         return;
       }
 
+      // Get user ID from localStorage
+      const userId = localStorage.getItem('spordate_user_code') || `user_${Date.now()}`;
+      
       // Call Stripe checkout API
       const response = await fetch('/api/checkout', {
         method: 'POST',
@@ -446,8 +449,10 @@ export default function DiscoveryPage() {
           originUrl: window.location.origin,
           amount: finalPrice, // Send amount for free session detection
           metadata: {
+            userId: userId,
             profileId: String(currentProfile.id),
             profileName: currentProfile.name.split(',')[0],
+            sport: currentProfile.sports?.[0] || 'Afroboost',
             partnerId: selectedMeetingPlace || '',
             partnerName: meetingPartner?.name || '',
             partnerAddress: meetingPartner ? `${meetingPartner.address}, ${meetingPartner.city}` : '',
