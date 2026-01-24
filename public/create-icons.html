@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Create PWA Icons</title>
+</head>
+<body>
+<canvas id="canvas192" width="192" height="192"></canvas>
+<canvas id="canvas512" width="512" height="512"></canvas>
+<script>
+function createIcon(canvasId, size) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  
+  // Purple gradient background
+  const gradient = ctx.createLinearGradient(0, 0, size, size);
+  gradient.addColorStop(0, '#7B1FA2');
+  gradient.addColorStop(1, '#E91E63');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  
+  // White circle
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Lightning bolt (Zap icon)
+  ctx.fillStyle = '#7B1FA2';
+  ctx.beginPath();
+  ctx.moveTo(size/2 + size/8, size/2 - size/4);
+  ctx.lineTo(size/2 - size/12, size/2);
+  ctx.lineTo(size/2 + size/24, size/2);
+  ctx.lineTo(size/2 - size/8, size/2 + size/4);
+  ctx.lineTo(size/2 + size/12, size/2 + size/24);
+  ctx.lineTo(size/2 - size/24, size/2 + size/24);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Download
+  const link = document.createElement('a');
+  link.download = `icon-${size}.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+}
+
+createIcon('canvas192', 192);
+setTimeout(() => createIcon('canvas512', 512), 1000);
+</script>
+</body>
+</html>
