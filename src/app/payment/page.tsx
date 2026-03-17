@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Lock, CheckCircle, Smartphone, Apple } from "lucide-react";
+import { CreditCard, Lock, CheckCircle, Smartphone, Apple, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
+import { useAuth } from '@/context/AuthContext';
 
 const ApplePayIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" {...props}>
@@ -57,6 +58,7 @@ export default function PaymentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { width, height } = useWindowSize();
+  const { user, isLoggedIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -72,43 +74,39 @@ export default function PaymentPage() {
     }
   }, [searchParams]);
 
-  const handlePayment = async (method: string) => {
+  const handlePayment = async () => {
     if (!selectedPackage) return;
 
+    if (!isLoggedIn || !user) {
+      router.push('/login?redirect=/payment');
+      return;
+    }
+
     setLoading(true);
-    setSelectedMethod(method);
 
     try {
-      // Call POST /api/checkout with packageId
       const response = await fetch('/api/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           packageId: selectedPackage.id,
-          paymentMethod: method,
-          userId: 'current-user-id', // Should come from auth context
+          userId: user.uid,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Payment initialization failed');
-      }
-
       const data = await response.json();
 
-      // Simulate successful payment processing
-      setTimeout(() => {
-        setLoading(false);
-        setPaymentSuccess(true);
-        setShowConfetti(true);
-      }, 2000);
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors du paiement');
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      }
     } catch (error) {
       console.error('Payment error:', error);
       setLoading(false);
-      setSelectedMethod(null);
-      // Show error toast/notification
     }
   };
 
@@ -281,37 +279,25 @@ export default function PaymentPage() {
                 <CardDescription>Choisissez comment vous souhaitez payer</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* TWINT */}
+                {/* Stripe Checkout — handles Card, TWINT, Apple Pay */}
                 <Button
-                  onClick={() => handlePayment('TWINT')}
+                  onClick={() => handlePayment()}
                   disabled={loading}
-                  variant="outline"
-                  className="w-full justify-center h-16 text-base border-red-500/50 hover:bg-red-500/10 hover:text-red-400 text-red-400 transition-all"
+                  className="w-full justify-center h-16 text-base bg-gradient-to-r from-violet-500 to-rose-500 text-white font-semibold hover:from-violet-600 hover:to-rose-600 transition-all shadow-lg shadow-violet-500/30"
                 >
-                  <Smartphone className="mr-3 h-5 w-5" />
-                  Payer avec TWINT
+                  {loading ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <CreditCard className="mr-3 h-5 w-5" />
+                  )}
+                  {loading ? 'Redirection...' : `Payer ${selectedPackage.price} CHF`}
                 </Button>
 
-                {/* Card */}
-                <Button
-                  onClick={() => handlePayment('CARD')}
-                  disabled={loading}
-                  className="w-full justify-center h-16 text-base bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30"
-                >
-                  <CreditCard className="mr-3 h-5 w-5" />
-                  Carte Bancaire (Stripe)
-                </Button>
-
-                {/* Apple Pay */}
-                <Button
-                  onClick={() => handlePayment('APPLE_PAY')}
-                  disabled={loading}
-                  variant="outline"
-                  className="w-full justify-center h-16 text-base border-slate-600 hover:bg-slate-700/50 text-gray-200 transition-all"
-                >
-                  <Apple className="mr-3 h-5 w-5" />
-                  Apple Pay
-                </Button>
+                <div className="flex items-center justify-center gap-4 text-xs text-gray-500 mt-2">
+                  <span className="flex items-center gap-1"><CreditCard className="h-3.5 w-3.5" /> Carte</span>
+                  <span className="flex items-center gap-1"><Smartphone className="h-3.5 w-3.5" /> TWINT</span>
+                  <span className="flex items-center gap-1"><Apple className="h-3.5 w-3.5" /> Apple Pay</span>
+                </div>
 
                 {/* Security Info */}
                 <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">

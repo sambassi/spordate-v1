@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Dumbbell, Bell, Languages, LogOut } from 'lucide-react';
+import { Menu, Dumbbell, Bell, Languages, LogOut, Crown } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   DropdownMenu,
@@ -22,6 +22,7 @@ export default function Header() {
     { href: "/dashboard", label: t('nav_find_match') || "Find Match" },
     { href: "/profile", label: t('nav_profile') || "Mon Profil" },
     { href: "/activities", label: t('nav_activities') || "Activités" },
+    { href: "/premium", label: "Premium", isPremium: true },
   ];
 
   const authenticatedLinks = [
@@ -42,7 +43,16 @@ export default function Header() {
           </Link>
           <nav className="hidden items-center space-x-6 text-sm font-medium md:flex">
             {isLoggedIn && navLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="transition-colors hover:text-foreground/80 text-foreground/60">
+              <Link
+                key={link.href}
+                href={link.href}
+                className={
+                  (link as { isPremium?: boolean }).isPremium
+                    ? "transition-colors hover:text-[#D91CD2] text-[#D91CD2]/70 flex items-center gap-1"
+                    : "transition-colors hover:text-foreground/80 text-foreground/60"
+                }
+              >
+                {(link as { isPremium?: boolean }).isPremium && <Crown className="h-3.5 w-3.5" />}
                 {link.label}
               </Link>
             ))}
