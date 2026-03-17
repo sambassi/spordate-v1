@@ -1,367 +1,233 @@
 /**
  * Spordateur V2 — Webhook Stripe
- * Traite les paiements réussis → crédite utilisateur → MAJ analytics
- * Remplace PostgreSQL/Prisma par Firestore
+ * Lazy-loaded Firebase Admin + Stripe pour éviter les erreurs au build
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// --- Firebase Admin (côté serveur) ---
-function getAdminDb() {
+// Lazy init
+let _db: FirebaseFirestore.Firestore | null = null;
+let _FV: typeof import('firebase-admin/firestore').FieldValue | null = null;
+
+async function initAdmin() {
+  if (_db) return { db: _db, FV: _FV! };
+
+  const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+  const { getFirestore, FieldValue } = await import('firebase-admin/firestore');
+
   if (!getApps().length) {
-    // En production : utiliser un service account
-    // En dev : utiliser les env variables
     if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      initializeApp({ credential: cert(serviceAccount) });
+      initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)) });
     } else {
-      initializeApp({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'spordateur-claude',
-      });
+      initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'spordateur-claude' });
     }
   }
-  return getFirestore();
+
+  _db = getFirestore();
+  _FV = FieldValue;
+  return { db: _db, FV: _FV };
 }
 
-// --- Stripe ---
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia' as Stripe.LatestApiVersion,
-});
-
-// Packages (dupliqué ici pour le serveur)
 const PACKAGES: Record<string, { credits: number }> = {
-  '1_date':  { credits: 1 },
+  '1_date': { credits: 1 },
   '3_dates': { credits: 3 },
   '10_dates': { credits: 10 },
   'partner_monthly': { credits: 0 },
 };
 
+// =============================================================
 export async function POST(request: NextRequest) {
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
+
   const body = await request.text();
   const sig = request.headers.get('stripe-signature');
 
-  let event: Stripe.Event;
+  let event: Record<string, unknown>;
 
-  // 1. Vérifier la signature Stripe
   try {
     if (process.env.STRIPE_WEBHOOK_SECRET && sig) {
-      event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+      event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET) as unknown as Record<string, unknown>;
     } else {
-      event = JSON.parse(body) as Stripe.Event;
-      console.warn('[Webhook] Pas de vérification de signature');
+      event = JSON.parse(body);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erreur';
-    console.error('[Webhook] Signature invalide:', message);
-    return NextResponse.json({ error: `Signature invalide: ${message}` }, { status: 400 });
+    const msg = err instanceof Error ? err.message : 'Erreur';
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  console.log('[Webhook] Event:', event.type);
+  const type = event.type as string;
+  const obj = (event.data as Record<string, unknown>).object as Record<string, unknown>;
 
-  // 2. Traiter les événements
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session;
-      await handlePaymentSuccess(session);
+  switch (type) {
+    case 'checkout.session.completed':
+      await handlePaymentSuccess(obj, stripe);
       break;
-    }
-    case 'checkout.session.expired': {
-      const session = event.data.object as Stripe.Checkout.Session;
-      await handlePaymentExpired(session);
+    case 'checkout.session.expired':
+      await handleExpired(obj);
       break;
-    }
-    case 'customer.subscription.deleted': {
-      const subscription = event.data.object as Stripe.Subscription;
-      await handleSubscriptionCancelled(subscription);
+    case 'customer.subscription.deleted':
+      await handleSubCancelled(obj);
       break;
-    }
-    default:
-      console.log('[Webhook] Event non traité:', event.type);
   }
 
   return NextResponse.json({ received: true });
 }
 
-// ================================================================
-// PAIEMENT RÉUSSI
-// ================================================================
-async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
-  const db = getAdminDb();
-  const metadata = session.metadata || {};
-  const userId = metadata.userId;
-  const packageId = metadata.packageId || '';
-  const creditsToGrant = parseInt(metadata.creditsToGrant || '0');
-  const matchId = metadata.matchId || '';
-  const referralCode = metadata.referralCode || '';
-  const amountTotal = session.amount_total || 0;
-
-  console.log(`[Webhook] Paiement réussi — User: ${userId}, Package: ${packageId}, Crédits: ${creditsToGrant}`);
+// =============================================================
+async function handlePaymentSuccess(session: Record<string, unknown>, stripe: InstanceType<typeof import('stripe').default>) {
+  const { db, FV } = await initAdmin();
+  const meta = (session.metadata || {}) as Record<string, string>;
+  const userId = meta.userId;
+  const packageId = meta.packageId || '';
+  const creditsToGrant = parseInt(meta.creditsToGrant || '0');
+  const matchId = meta.matchId || '';
+  const referralCode = meta.referralCode || '';
+  const amountTotal = (session.amount_total as number) || 0;
+  const sessionId = session.id as string;
 
   if (!userId) {
-    console.error('[Webhook] userId manquant dans metadata');
-    await logError(db, 'Paiement sans userId', session.id);
+    await logErr(db, FV, 'Paiement sans userId', sessionId);
     return;
   }
 
-  // Idempotency : vérifier si déjà traité
-  const existingTx = await db.collection('transactions')
-    .where('stripeSessionId', '==', session.id)
-    .limit(1)
-    .get();
+  // Idempotency
+  const existing = await db.collection('transactions').where('stripeSessionId', '==', sessionId).limit(1).get();
+  if (!existing.empty) return;
 
-  if (!existingTx.empty) {
-    console.log('[Webhook] Transaction déjà traitée, skip');
-    return;
-  }
-
-  // Déterminer la méthode de paiement
-  let paymentMethod = 'card';
-  if (session.payment_method_types?.includes('twint')) {
+  // Detect payment method
+  let pm = 'card';
+  const pmTypes = session.payment_method_types as string[] | undefined;
+  if (pmTypes?.includes('twint')) {
     try {
       const pi = await stripe.paymentIntents.retrieve(session.payment_intent as string);
-      if (pi.payment_method_types?.includes('twint') || (pi as Record<string, unknown>).payment_method === 'twint') {
-        paymentMethod = 'twint';
-      }
-    } catch { /* ignore */ }
+      if (pi.payment_method_types?.includes('twint')) pm = 'twint';
+    } catch { /* ok */ }
   }
 
   const batch = db.batch();
 
-  // 1. Créer la transaction
+  // 1. Transaction
   const txRef = db.collection('transactions').doc();
   batch.set(txRef, {
-    transactionId: txRef.id,
-    stripeSessionId: session.id,
+    transactionId: txRef.id, stripeSessionId: sessionId,
     stripePaymentIntentId: session.payment_intent || '',
-    userId,
-    type: packageId === 'partner_monthly' ? 'partner_subscription' : 'credit_purchase',
-    amount: amountTotal,
-    currency: 'CHF',
-    paymentMethod,
-    status: 'succeeded',
-    metadata,
-    package: packageId,
-    creditsGranted: creditsToGrant,
-    createdAt: FieldValue.serverTimestamp(),
-    completedAt: FieldValue.serverTimestamp(),
+    userId, type: packageId === 'partner_monthly' ? 'partner_subscription' : 'credit_purchase',
+    amount: amountTotal, currency: 'CHF', paymentMethod: pm, status: 'succeeded',
+    metadata: meta, package: packageId, creditsGranted: creditsToGrant,
+    createdAt: FV.serverTimestamp(), completedAt: FV.serverTimestamp(),
   });
 
-  // 2. Créditer l'utilisateur
+  // 2. Credits
   if (creditsToGrant > 0) {
     const userRef = db.collection('users').doc(userId);
-    batch.update(userRef, {
-      credits: FieldValue.increment(creditsToGrant),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    batch.update(userRef, { credits: FV.increment(creditsToGrant), updatedAt: FV.serverTimestamp() });
 
-    // Historique des crédits
+    const snap = await userRef.get();
+    const cur = snap.exists ? (snap.data()?.credits || 0) : 0;
     const creditRef = db.collection('credits').doc();
-    const userSnap = await userRef.get();
-    const currentCredits = userSnap.exists ? (userSnap.data()?.credits || 0) : 0;
-
     batch.set(creditRef, {
-      creditId: creditRef.id,
-      userId,
-      type: 'purchase',
-      amount: creditsToGrant,
-      balance: currentCredits + creditsToGrant,
+      creditId: creditRef.id, userId, type: 'purchase', amount: creditsToGrant,
+      balance: cur + creditsToGrant,
       description: `Achat ${PACKAGES[packageId]?.credits || creditsToGrant} date(s)`,
-      relatedId: txRef.id,
-      createdAt: FieldValue.serverTimestamp(),
+      relatedId: txRef.id, createdAt: FV.serverTimestamp(),
     });
   }
 
-  // 3. Débloquer le chat si matchId fourni
+  // 3. Unlock chat
   if (matchId) {
-    const matchRef = db.collection('matches').doc(matchId);
-    batch.update(matchRef, { chatUnlocked: true });
-
-    // Message système dans le chat
-    const chatMsgRef = db.collection('chats').doc(matchId).collection('messages').doc();
-    batch.set(chatMsgRef, {
-      messageId: chatMsgRef.id,
-      senderId: 'system',
+    batch.update(db.collection('matches').doc(matchId), { chatUnlocked: true });
+    const msgRef = db.collection('chats').doc(matchId).collection('messages').doc();
+    batch.set(msgRef, {
+      messageId: msgRef.id, senderId: 'system',
       text: 'Le chat est débloqué ! Planifiez votre Sport Date',
-      type: 'system',
-      readBy: [],
-      createdAt: FieldValue.serverTimestamp(),
+      type: 'system', readBy: [], createdAt: FV.serverTimestamp(),
     });
   }
 
-  // 4. Analytics global
-  const globalRef = db.collection('analytics').doc('global');
-  batch.set(globalRef, {
-    totalRevenue: FieldValue.increment(amountTotal / 100),
-    lastUpdated: FieldValue.serverTimestamp(),
+  // 4. Analytics
+  batch.set(db.collection('analytics').doc('global'), {
+    totalRevenue: FV.increment(amountTotal / 100), lastUpdated: FV.serverTimestamp(),
   }, { merge: true });
 
-  // 5. Analytics daily
   const today = new Date().toISOString().split('T')[0];
-  const dailyRef = db.collection('analytics').doc(`daily_${today}`);
-  batch.set(dailyRef, {
-    date: today,
-    revenue: FieldValue.increment(amountTotal / 100),
-    creditsPurchased: FieldValue.increment(creditsToGrant),
-    [`byPaymentMethod.${paymentMethod}`]: FieldValue.increment(amountTotal / 100),
+  batch.set(db.collection('analytics').doc(`daily_${today}`), {
+    date: today, revenue: FV.increment(amountTotal / 100),
+    creditsPurchased: FV.increment(creditsToGrant),
+    [`byPaymentMethod.${pm}`]: FV.increment(amountTotal / 100),
   }, { merge: true });
 
-  // 6. Notification à l'utilisateur
-  const notifRef = db.collection('notifications').doc();
-  batch.set(notifRef, {
-    notificationId: notifRef.id,
-    userId,
-    type: 'payment',
-    title: 'Paiement confirmé',
-    body: `${creditsToGrant} crédit(s) ajouté(s) à ton compte`,
-    data: { transactionId: txRef.id, packageId },
-    isRead: false,
-    createdAt: FieldValue.serverTimestamp(),
+  // 5. Notification
+  const nRef = db.collection('notifications').doc();
+  batch.set(nRef, {
+    notificationId: nRef.id, userId, type: 'payment',
+    title: 'Paiement confirmé', body: `${creditsToGrant} crédit(s) ajouté(s)`,
+    data: { transactionId: txRef.id, packageId }, isRead: false,
+    createdAt: FV.serverTimestamp(),
   });
 
-  // COMMIT
   await batch.commit();
-  console.log(`[Webhook] Traitement terminé — ${creditsToGrant} crédits ajoutés à ${userId}`);
 
-  // 7. Traiter l'affiliation (hors batch car peut échouer indépendamment)
+  // 6. Affiliation
   if (referralCode) {
-    try {
-      await processReferralCommission(db, userId, amountTotal, referralCode);
-    } catch (e) {
-      console.error('[Webhook] Erreur affiliation:', e);
-      await logError(db, `Erreur affiliation: ${e}`, session.id);
-    }
+    try { await processCommission(db, FV, userId, amountTotal, referralCode); }
+    catch (e) { await logErr(db, FV, `Erreur affiliation: ${e}`, sessionId); }
   }
 }
 
-// ================================================================
-// AFFILIATION — Commission sur achat
-// ================================================================
-async function processReferralCommission(
-  db: FirebaseFirestore.Firestore,
-  userId: string,
-  amountCentimes: number,
-  referralCode: string
+// =============================================================
+async function processCommission(
+  db: FirebaseFirestore.Firestore, FV: typeof import('firebase-admin/firestore').FieldValue,
+  userId: string, amount: number, code: string
 ) {
-  // Trouver le créateur par son code
-  const creatorSnap = await db.collection('creators')
-    .where('referralCode', '==', referralCode)
-    .where('isActive', '==', true)
-    .limit(1)
-    .get();
-
-  if (creatorSnap.empty) return;
-
-  const creator = creatorSnap.docs[0];
-  const creatorData = creator.data();
-  const commissionRate = creatorData.commissionRate || 0.10;
-  const commission = Math.round(amountCentimes * commissionRate); // En centimes
-
+  const snap = await db.collection('creators').where('referralCode', '==', code).where('isActive', '==', true).limit(1).get();
+  if (snap.empty) return;
+  const creator = snap.docs[0];
+  const rate = creator.data().commissionRate || 0.10;
+  const commission = Math.round(amount * rate);
   const batch = db.batch();
-
-  // MAJ le créateur
   batch.update(creator.ref, {
-    totalEarnings: FieldValue.increment(commission / 100),
-    pendingPayout: FieldValue.increment(commission / 100),
-    totalPurchases: FieldValue.increment(1),
+    totalEarnings: FV.increment(commission / 100), pendingPayout: FV.increment(commission / 100), totalPurchases: FV.increment(1),
   });
-
-  // MAJ ou créer le referral
-  const referralSnap = await db.collection('referrals')
-    .where('referredUserId', '==', userId)
-    .where('referrerId', '==', creator.id)
-    .limit(1)
-    .get();
-
-  if (!referralSnap.empty) {
-    batch.update(referralSnap.docs[0].ref, {
-      totalPurchases: FieldValue.increment(1),
-      totalCommission: FieldValue.increment(commission / 100),
-      status: 'active',
-    });
+  const rSnap = await db.collection('referrals').where('referredUserId', '==', userId).where('referrerId', '==', creator.id).limit(1).get();
+  if (!rSnap.empty) {
+    batch.update(rSnap.docs[0].ref, { totalPurchases: FV.increment(1), totalCommission: FV.increment(commission / 100), status: 'active' });
   }
-
-  // Analytics créateur
-  const today = new Date().toISOString().split('T')[0];
-  const dailyRef = db.collection('analytics').doc(`daily_${today}`);
-  batch.set(dailyRef, {
-    [`byCreator.${creator.id}.revenue`]: FieldValue.increment(commission / 100),
-  }, { merge: true });
-
   await batch.commit();
-  console.log(`[Webhook] Commission ${(commission / 100).toFixed(2)} CHF versée au créateur ${creator.id}`);
 }
 
-// ================================================================
-// PAIEMENT EXPIRÉ
-// ================================================================
-async function handlePaymentExpired(session: Stripe.Checkout.Session) {
-  const db = getAdminDb();
-  const userId = session.metadata?.userId;
-
-  // Vérifier s'il y a une transaction pending
-  const txSnap = await db.collection('transactions')
-    .where('stripeSessionId', '==', session.id)
-    .limit(1)
-    .get();
-
-  if (!txSnap.empty) {
-    await txSnap.docs[0].ref.update({ status: 'failed' });
-  }
-
-  if (userId) {
-    await logError(db, `Session Stripe expirée: ${session.id}`, userId);
-  }
+// =============================================================
+async function handleExpired(session: Record<string, unknown>) {
+  const { db, FV } = await initAdmin();
+  const sid = session.id as string;
+  const tx = await db.collection('transactions').where('stripeSessionId', '==', sid).limit(1).get();
+  if (!tx.empty) await tx.docs[0].ref.update({ status: 'failed' });
+  const uid = (session.metadata as Record<string, string>)?.userId;
+  if (uid) await logErr(db, FV, `Session expirée: ${sid}`, uid);
 }
 
-// ================================================================
-// ABONNEMENT ANNULÉ (partenaire)
-// ================================================================
-async function handleSubscriptionCancelled(subscription: Stripe.Subscription) {
-  const db = getAdminDb();
-  const partnerId = subscription.metadata?.partnerId;
-
-  if (partnerId) {
-    await db.collection('partners').doc(partnerId).update({
-      subscriptionStatus: 'cancelled',
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  }
+async function handleSubCancelled(sub: Record<string, unknown>) {
+  const { db, FV } = await initAdmin();
+  const pid = (sub.metadata as Record<string, string>)?.partnerId;
+  if (pid) await db.collection('partners').doc(pid).update({ subscriptionStatus: 'cancelled', updatedAt: FV.serverTimestamp() });
 }
 
-// ================================================================
-// ERROR LOG helper
-// ================================================================
-async function logError(db: FirebaseFirestore.Firestore, message: string, relatedId: string) {
+async function logErr(db: FirebaseFirestore.Firestore, FV: typeof import('firebase-admin/firestore').FieldValue, msg: string, rid: string) {
   const ref = db.collection('errorLogs').doc();
   await ref.set({
-    logId: ref.id,
-    source: 'backend',
-    level: 'error',
-    message,
-    stackTrace: '',
-    userId: relatedId,
-    url: '/api/webhooks/stripe',
-    userAgent: 'server',
-    metadata: {},
-    resolved: false,
-    resolvedAt: null,
-    createdAt: FieldValue.serverTimestamp(),
+    logId: ref.id, source: 'backend', level: 'error', message: msg,
+    stackTrace: '', userId: rid, url: '/api/webhooks/stripe', userAgent: 'server',
+    metadata: {}, resolved: false, resolvedAt: null, createdAt: FV.serverTimestamp(),
   });
 }
 
-// Health check
 export async function GET() {
   return NextResponse.json({
-    status: 'ok',
-    webhook: 'stripe-firestore-v2',
+    status: 'ok', webhook: 'stripe-firestore-v2',
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     webhookSecretConfigured: !!process.env.STRIPE_WEBHOOK_SECRET,
-    firebaseProject: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'spordateur-claude',
   });
 }
