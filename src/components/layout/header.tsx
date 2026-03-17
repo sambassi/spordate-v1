@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Dumbbell, Bell, Languages } from 'lucide-react';
+import { Menu, Dumbbell, Bell, Languages, LogOut } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   DropdownMenu,
@@ -15,7 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function Header() {
   const { t, setLanguage } = useLanguage();
-  const { isLoggedIn, logout } = useAuth();
+  const { isLoggedIn, loading, logout, user } = useAuth();
 
   const navLinks = [
     { href: "/discovery", label: t('nav_discovery') || "Rencontres" },
@@ -27,6 +27,10 @@ export default function Header() {
   const authenticatedLinks = [
       { href: "/notifications", label: t('nav_notifications') || "Notifications" },
   ];
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -42,8 +46,7 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
-             {/* --- Affichage conditionnel pour les utilisateurs connectés --- */}
-            {isLoggedIn && authenticatedLinks.map((link) => (
+             {isLoggedIn && authenticatedLinks.map((link) => (
               <Link key={link.href} href={link.href} className="transition-colors hover:text-foreground/80 text-foreground/60">
                 {link.label}
               </Link>
@@ -71,9 +74,14 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* --- Logique d'affichage conditionnel --- */}
-            {isLoggedIn ? (
+            {/* --- Auth-dependent UI --- */}
+            {!loading && isLoggedIn ? (
                 <>
+                    {user?.displayName && (
+                      <span className="text-sm text-foreground/60 hidden lg:inline">
+                        {user.displayName}
+                      </span>
+                    )}
                     <Button variant="ghost" size="icon" asChild>
                         <Link href="/notifications">
                             <div className="relative">
@@ -86,18 +94,21 @@ export default function Header() {
                             <span className="sr-only">Notifications</span>
                         </Link>
                     </Button>
-                    <Button variant="ghost" onClick={logout}>{t('nav_logout') || "Déconnexion"}</Button>
+                    <Button variant="ghost" onClick={handleLogout} className="flex items-center gap-2">
+                      <LogOut className="h-4 w-4" />
+                      {t('nav_logout') || "Déconnexion"}
+                    </Button>
                 </>
-            ) : (
+            ) : !loading ? (
                 <>
                     <Button variant="ghost" asChild>
-                        <Link href="/login">{t('nav_login')}</Link>
+                        <Link href="/login">{t('nav_login') || "Connexion"}</Link>
                     </Button>
                     <Button asChild className="bg-gradient-to-r from-[#7B1FA2] to-[#E91E63] text-white font-semibold">
-                        <Link href="/signup">{t('nav_signup')}</Link>
+                        <Link href="/signup">{t('nav_signup') || "Inscription"}</Link>
                     </Button>
                 </>
-            )}
+            ) : null}
         </div>
         <div className="md:hidden flex items-center">
           <Sheet>
@@ -111,6 +122,12 @@ export default function Header() {
                <SheetHeader>
                   <SheetTitle className="sr-only">Mobile Menu</SheetTitle>
               </SheetHeader>
+              {isLoggedIn && user?.displayName && (
+                <div className="px-4 pb-4 mb-4 border-b border-border/20">
+                  <p className="text-sm font-medium">{user.displayName}</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                </div>
+              )}
               <nav className="flex flex-col space-y-4 text-lg">
                 {isLoggedIn && [...navLinks, ...authenticatedLinks].map((link) => (
                   <Link key={link.href} href={link.href} className="px-4 py-2 rounded-md hover:bg-accent/10">
@@ -119,20 +136,21 @@ export default function Header() {
                 ))}
               </nav>
               <div className="absolute bottom-8 left-4 right-4 flex flex-col space-y-2">
-                 {isLoggedIn ? (
-                     <Button variant="outline" onClick={logout} className="w-full">
+                 {!loading && isLoggedIn ? (
+                     <Button variant="outline" onClick={handleLogout} className="w-full flex items-center gap-2">
+                        <LogOut className="h-4 w-4" />
                         {t('nav_logout') || "Déconnexion"}
                      </Button>
-                 ) : (
+                 ) : !loading ? (
                     <>
                         <Button variant="outline" asChild className="w-full">
-                           <Link href="/login">{t('nav_login')}</Link>
+                           <Link href="/login">{t('nav_login') || "Connexion"}</Link>
                         </Button>
                         <Button asChild className="w-full bg-gradient-to-r from-[#7B1FA2] to-[#E91E63] text-white font-semibold">
-                          <Link href="/signup">{t('nav_signup')}</Link>
+                          <Link href="/signup">{t('nav_signup') || "Inscription"}</Link>
                         </Button>
                     </>
-                 )}
+                 ) : null}
               </div>
             </SheetContent>
           </Sheet>
