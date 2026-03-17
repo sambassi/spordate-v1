@@ -59,9 +59,9 @@ const mockSessions = [
 
 // Fallback profiles (used when Firestore has no users yet)
 const fallbackProfiles = [
-  { id: 1, name: 'Julie, 28', location: 'Paris', sports: ['Afroboost', 'Danse'], bio: 'Passionnée d\'Afroboost, je cherche un partenaire pour danser !', imageId: 'discovery-1', price: 25 },
-  { id: 2, name: 'Marc, 32', location: 'Lyon', sports: ['Danse', 'Fitness'], bio: 'Danseur confirmé, fan de rythmes africains.', imageId: 'discovery-2', price: 30 },
-  { id: 3, name: 'Sophie, 25', location: 'Marseille', sports: ['Afroboost', 'Fitness'], bio: 'Coach Afroboost, je partage ma passion avec énergie !', imageId: 'discovery-3', price: 35 },
+  { id: 1, name: 'Julie, 28', location: 'Genève', sports: ['Afroboost', 'Danse'], bio: 'Passionnée d\'Afroboost, je cherche un partenaire pour danser !', imageId: 'discovery-1', price: 25 },
+  { id: 2, name: 'Marc, 32', location: 'Lausanne', sports: ['Danse', 'Fitness'], bio: 'Danseur confirmé, fan de rythmes africains.', imageId: 'discovery-2', price: 30 },
+  { id: 3, name: 'Sophie, 25', location: 'Zurich', sports: ['Afroboost', 'Fitness'], bio: 'Coach Afroboost, je partage ma passion avec énergie !', imageId: 'discovery-3', price: 35 },
 ];
 
 const boostedActivities = [
@@ -558,27 +558,18 @@ export default function DiscoveryPage() {
         return;
       }
 
-      // Get user ID from localStorage
-      const userId = localStorage.getItem('spordate_user_code') || `user_${Date.now()}`;
-      
-      // Call Stripe checkout API
+      // Use real Firebase userId
+      const userId = user?.uid || localStorage.getItem('spordate_user_code') || `user_${Date.now()}`;
+
+      // Call Stripe checkout API with correct packageId format
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          packageType: isDuoTicket ? 'duo' : 'solo',
-          originUrl: window.location.origin,
-          amount: finalPrice, // Send amount for free session detection
-          metadata: {
-            userId: userId,
-            profileId: String(currentProfile.id),
-            profileName: currentProfile.name.split(',')[0],
-            sport: currentProfile.sports?.[0] || 'Afroboost',
-            partnerId: selectedMeetingPlace || '',
-            partnerName: meetingPartner?.name || '',
-            partnerAddress: meetingPartner ? `${meetingPartner.address}, ${meetingPartner.city}` : '',
-            ticketType: isDuoTicket ? 'duo' : 'solo',
-          },
+          packageId: '1_date',
+          userId: userId,
+          matchId: '',
+          referralCode: '',
         }),
       });
 
@@ -662,7 +653,7 @@ export default function DiscoveryPage() {
     const location = lastBooking.partnerAddress 
       ? encodeURIComponent(lastBooking.partnerAddress)
       : encodeURIComponent('Spordateur');
-    const priceLabel = lastBooking.amount === 0 ? 'OFFERT' : `${lastBooking.amount}€`;
+    const priceLabel = lastBooking.amount === 0 ? 'OFFERT' : `${lastBooking.amount} CHF`;
     const details = encodeURIComponent(`🎟️ Ticket ${ticketType} - ${priceLabel}\nPartenaire: ${lastBooking.profile}\nLieu: ${lastBooking.partner}\n\nRéservé via Spordateur`);
     
     // Create event for tomorrow at 19:00
@@ -708,7 +699,7 @@ BEGIN:VEVENT
 DTSTART:${formatIcsDate(startDate)}
 DTEND:${formatIcsDate(endDate)}
 SUMMARY:Séance Afroboost ${ticketType} avec ${lastBooking.profile}
-DESCRIPTION:🎟️ Ticket ${ticketType} - ${lastBooking.amount === 0 ? 'OFFERT' : lastBooking.amount + '€'}\\nPartenaire: ${lastBooking.profile}\\nLieu: ${lastBooking.partner}\\n\\nRéservé via Spordateur
+DESCRIPTION:🎟️ Ticket ${ticketType} - ${lastBooking.amount === 0 ? 'OFFERT' : lastBooking.amount + ' CHF'}\\nPartenaire: ${lastBooking.profile}\\nLieu: ${lastBooking.partner}\\n\\nRéservé via Spordateur
 LOCATION:${location}
 STATUS:CONFIRMED
 END:VEVENT
@@ -831,7 +822,7 @@ END:VCALENDAR`;
                     className="flex-1 bg-gradient-to-r from-[#7B1FA2] to-[#E91E63] text-white"
                   >
                     <Zap className="mr-2 h-4 w-4" />
-                    {currentProfile.price === 0 ? 'Séance d\'essai gratuite' : `Réserver une séance • ${currentProfile.price}€`}
+                    {currentProfile.price === 0 ? 'Séance d\'essai gratuite' : `Réserver une séance • ${currentProfile.price} CHF`}
                   </Button>
                 ) : (
                   <Button 
@@ -962,24 +953,24 @@ END:VCALENDAR`;
                 <span className="text-gray-400">
                   {isDuoTicket ? 'Séance Duo Afroboost (2x 1h)' : 'Séance Afroboost (1h)'}
                 </span>
-                <span className="font-semibold">{getCurrentPrice() === 0 ? 'SÉANCE D\'ESSAI' : `${getCurrentPrice()}€`}</span>
+                <span className="font-semibold">{getCurrentPrice() === 0 ? 'SÉANCE D\'ESSAI' : `${getCurrentPrice()} CHF`}</span>
               </div>
               {isDuoTicket && (
                 <div className="flex justify-between items-center text-sm text-violet-300 mb-2">
                   <span className="flex items-center gap-1">
                     <Gift className="h-3 w-3" /> Place offerte incluse
                   </span>
-                  <span className="line-through text-gray-500">{(currentProfile?.price || 25) * 2}€</span>
+                  <span className="line-through text-gray-500">{(currentProfile?.price || 25) * 2} CHF</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Frais de service</span>
-                <span className="text-gray-500">0€</span>
+                <span className="text-gray-500">0 CHF</span>
               </div>
               <Separator className="my-3 bg-white/10" />
               <div className="flex justify-between items-center text-lg font-bold">
                 <span>Total</span>
-                <span className="text-green-400">{getCurrentPrice() === 0 ? 'OFFERT' : `${getCurrentPrice()}€`}</span>
+                <span className="text-green-400">{getCurrentPrice() === 0 ? 'OFFERT' : `${getCurrentPrice()} CHF`}</span>
               </div>
             </div>
 
@@ -1014,7 +1005,7 @@ END:VCALENDAR`;
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">Paiement sécurisé Stripe</p>
-                  <p className="text-xs text-gray-400">Carte bancaire • Apple Pay • Google Pay</p>
+                  <p className="text-xs text-gray-400">TWINT • Carte bancaire • Apple Pay</p>
                 </div>
               </div>
             </div>
@@ -1040,7 +1031,7 @@ END:VCALENDAR`;
               ) : (
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5" />
-                  <span>{getCurrentPrice() === 0 ? 'Confirmer ma séance d\'essai' : `Payer ${getCurrentPrice()}€`}</span>
+                  <span>{getCurrentPrice() === 0 ? 'Confirmer ma séance d\'essai' : `Payer ${getCurrentPrice()} CHF`}</span>
                   {isDuoTicket && <Badge className="bg-white/20 text-white text-xs ml-1">Duo</Badge>}
                 </div>
               )}
@@ -1266,7 +1257,7 @@ END:VCALENDAR`;
                 <div className="flex justify-between">
                   <span className="text-gray-400">Montant</span>
                   <span className="text-green-400 font-semibold">
-                    {lastBooking?.amount === 0 ? 'OFFERT' : `${lastBooking?.amount}€`}
+                    {lastBooking?.amount === 0 ? 'OFFERT' : `${lastBooking?.amount} CHF`}
                   </span>
                 </div>
               </div>
