@@ -36,11 +36,49 @@ export interface SportEntry {
   level: 'beginner' | 'intermediate' | 'advanced';
 }
 
+// ===================== DANCE ACTIVITIES =====================
+export type DanceCategory =
+  | 'afroboost'
+  | 'zumba'
+  | 'afro_dance'
+  | 'dance_fitness'
+  | 'salsa'
+  | 'bachata'
+  | 'hiphop'
+  | 'dance_workout';
+
+export type DanceLevel = 'debutant' | 'intermediaire' | 'avance';
+
+export interface DanceEntry {
+  category: DanceCategory;
+  level: DanceLevel;
+}
+
+export const DANCE_ACTIVITIES: Record<DanceCategory, { label: string; emoji: string; color: string; description: string }> = {
+  afroboost:      { label: 'Afroboost',       emoji: '🔥', color: 'from-orange-500 to-red-600',    description: 'Énergie afro, cardio intense, bonne humeur garantie' },
+  zumba:          { label: 'Zumba',            emoji: '💃', color: 'from-pink-500 to-rose-600',     description: 'Danse latine, fitness fun et rythmes entraînants' },
+  afro_dance:     { label: 'Afro Dance',       emoji: '🥁', color: 'from-amber-500 to-orange-600',  description: 'Mouvements africains authentiques, expression libre' },
+  dance_fitness:  { label: 'Dance Fitness',    emoji: '⚡', color: 'from-violet-500 to-purple-600', description: 'Cardio dansé, sculpte ton corps en t\'éclatant' },
+  salsa:          { label: 'Salsa',            emoji: '🌶️', color: 'from-red-500 to-rose-600',      description: 'Rythmes latins, connexion et passion' },
+  bachata:        { label: 'Bachata',          emoji: '🎶', color: 'from-fuchsia-500 to-pink-600',  description: 'Sensualité et douceur, danse à deux' },
+  hiphop:         { label: 'Hip-Hop',          emoji: '🎤', color: 'from-slate-600 to-zinc-800',    description: 'Grooves urbains, freestyle et attitude' },
+  dance_workout:  { label: 'Dance Workout',    emoji: '💪', color: 'from-emerald-500 to-teal-600',  description: 'Entraînement complet en mode danse' },
+};
+
+export const DANCE_LEVELS: Record<DanceLevel, { label: string; emoji: string }> = {
+  debutant:      { label: 'Débutant',       emoji: '🌱' },
+  intermediaire: { label: 'Intermédiaire',  emoji: '⭐' },
+  avance:        { label: 'Avancé',         emoji: '🏆' },
+};
+
 export interface UserPreferences {
   ageRange: { min: number; max: number };
   genderPreference: 'male' | 'female' | 'all';
   maxDistance: number;
   preferredSports: string[];
+  likesDancing: boolean;
+  danceLevel: DanceLevel | null;
+  preferredDanceStyles: DanceCategory[];
 }
 
 // ===================== MATCHES =====================

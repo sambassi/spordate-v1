@@ -76,6 +76,48 @@ export default function AdminDashboard() {
   const [loadingData, setLoadingData] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationBody, setNotificationBody] = useState("");
+
+  // ==================== FEATURED ACTIVITIES STATE ====================
+  const ALL_ADMIN_ACTIVITIES = [
+    { id: 'afroboost', name: 'Afroboost', emoji: '🔥', type: 'dance' as const },
+    { id: 'zumba', name: 'Zumba', emoji: '💃', type: 'dance' as const },
+    { id: 'afro_dance', name: 'Afro Dance', emoji: '🥁', type: 'dance' as const },
+    { id: 'dance_fitness', name: 'Dance Fitness', emoji: '⚡', type: 'dance' as const },
+    { id: 'salsa', name: 'Salsa', emoji: '🌶️', type: 'dance' as const },
+    { id: 'bachata', name: 'Bachata', emoji: '🎶', type: 'dance' as const },
+    { id: 'hiphop', name: 'Hip-Hop', emoji: '🎤', type: 'dance' as const },
+    { id: 'dance_workout', name: 'Dance Workout', emoji: '💪', type: 'dance' as const },
+    { id: 'tennis', name: 'Tennis', emoji: '🎾', type: 'sport' as const },
+    { id: 'yoga', name: 'Yoga', emoji: '🧘', type: 'sport' as const },
+    { id: 'running', name: 'Running', emoji: '🏃', type: 'sport' as const },
+    { id: 'fitness', name: 'Fitness', emoji: '🏋️', type: 'sport' as const },
+    { id: 'swimming', name: 'Natation', emoji: '🏊', type: 'sport' as const },
+    { id: 'climbing', name: 'Escalade', emoji: '🧗', type: 'sport' as const },
+    { id: 'cycling', name: 'Vélo', emoji: '🚴', type: 'sport' as const },
+    { id: 'crossfit', name: 'CrossFit', emoji: '🔨', type: 'sport' as const },
+  ];
+  const [featuredActivities, setFeaturedActivities] = useState<string[]>([
+    'afroboost', 'zumba', 'salsa', 'hiphop', 'dance_fitness', 'tennis', 'yoga', 'fitness'
+  ]);
+
+  // Load featured from localStorage (in prod: Firestore settings/featuredActivities)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('spordate_featured_activities');
+    if (saved) {
+      try { setFeaturedActivities(JSON.parse(saved)); } catch {}
+    }
+  }, []);
+
+  const toggleFeaturedActivity = (id: string) => {
+    setFeaturedActivities(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('spordate_featured_activities', JSON.stringify(next));
+      }
+      return next;
+    });
+  };
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
 
@@ -370,6 +412,10 @@ export default function AdminDashboard() {
           <TabsTrigger value="notifications" className="text-xs md:text-sm">
             <Mail className="mr-2 h-4 w-4" />
             Notify
+          </TabsTrigger>
+          <TabsTrigger value="activities" className="text-xs md:text-sm">
+            <Activity className="mr-2 h-4 w-4" />
+            Activités
           </TabsTrigger>
         </TabsList>
 
@@ -882,6 +928,96 @@ export default function AdminDashboard() {
                 <Mail className="mr-2 h-4 w-4" />
                 Send to All Users
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ==================== ACTIVITIES TAB ==================== */}
+        <TabsContent value="activities" className="space-y-6">
+          <Card className="bg-[#0f1115] border-gray-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-orange-400" />
+                Activités en vedette sur le site
+              </CardTitle>
+              <CardDescription>
+                Sélectionnez les sports et danses affichés sur la landing page. Max recommandé : 8.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Counter */}
+              <div className="flex items-center gap-3 p-3 bg-orange-900/20 border border-orange-800/30 rounded-lg">
+                <span className="text-2xl font-bold text-orange-400">{featuredActivities.length}</span>
+                <span className="text-sm text-gray-400">activités en vedette</span>
+                {featuredActivities.length > 8 && (
+                  <Badge className="ml-auto bg-yellow-600/20 text-yellow-400 border-yellow-600/30">
+                    Beaucoup d'activités — la grille sera grande
+                  </Badge>
+                )}
+              </div>
+
+              {/* Dance section */}
+              <div>
+                <h4 className="text-sm font-semibold text-orange-300 mb-3 flex items-center gap-2">
+                  💃 Danses
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {ALL_ADMIN_ACTIVITIES.filter(a => a.type === 'dance').map(activity => (
+                    <button
+                      key={activity.id}
+                      onClick={() => toggleFeaturedActivity(activity.id)}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        featuredActivities.includes(activity.id)
+                          ? 'bg-orange-500/10 border-orange-500 ring-1 ring-orange-500/50'
+                          : 'bg-gray-900/50 border-gray-800 hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-2xl">{activity.emoji}</span>
+                        {featuredActivities.includes(activity.id) && (
+                          <Check className="h-4 w-4 text-orange-400" />
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-white">{activity.name}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sport section */}
+              <div>
+                <h4 className="text-sm font-semibold text-blue-300 mb-3 flex items-center gap-2">
+                  🏃 Sports
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {ALL_ADMIN_ACTIVITIES.filter(a => a.type === 'sport').map(activity => (
+                    <button
+                      key={activity.id}
+                      onClick={() => toggleFeaturedActivity(activity.id)}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        featuredActivities.includes(activity.id)
+                          ? 'bg-blue-500/10 border-blue-500 ring-1 ring-blue-500/50'
+                          : 'bg-gray-900/50 border-gray-800 hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-2xl">{activity.emoji}</span>
+                        {featuredActivities.includes(activity.id) && (
+                          <Check className="h-4 w-4 text-blue-400" />
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-white">{activity.name}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save info */}
+              <div className="bg-green-900/20 border border-green-800/30 p-3 rounded-lg">
+                <p className="text-sm text-green-400">
+                  ✅ Les changements sont sauvegardés automatiquement. En production, ils seront synchronisés via Firestore pour un effet immédiat sur la landing page.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

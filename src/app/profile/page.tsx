@@ -212,22 +212,96 @@ export default function ProfilePage() {
 
         {/* SECTION SPORTS */}
         <Card className="bg-[#0a111a] border-gray-800">
-            <CardHeader><CardTitle>Mes Sports</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Mes Sports</CardTitle><p className="text-xs text-gray-500">Sélectionnez vos sports favoris</p></CardHeader>
             <CardContent>
                 <div className="flex flex-wrap gap-2">
-                    {["Tennis", "Fitness", "Running", "Yoga", "Crossfit", "Football"].map((sport) => (
-                        <Badge 
+                    {["Tennis", "Fitness", "Running", "Yoga", "Crossfit", "Football", "Natation", "Vélo", "Escalade"].map((sport) => (
+                        <Badge
                             key={sport}
                             onClick={() => toggleSport(sport)}
                             className={`cursor-pointer px-4 py-2 text-sm border ${
-                                (profile.sports || []).includes(sport) 
-                                ? 'bg-cyan-900/30 border-cyan-500 text-cyan-400' 
+                                (profile.sports || []).includes(sport)
+                                ? 'bg-cyan-900/30 border-cyan-500 text-cyan-400'
                                 : 'bg-black/40 border-gray-700 text-gray-400 hover:border-gray-500'
                             }`}
                         >
                             {sport}
                         </Badge>
                     ))}
+                </div>
+            </CardContent>
+        </Card>
+
+        {/* SECTION DANSE */}
+        <Card className="bg-[#0a111a] border-gray-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">Mes Danses <span className="text-lg">💃</span></CardTitle>
+              <p className="text-xs text-gray-500">Sélectionnez vos styles de danse</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: "Afroboost", emoji: "🔥" },
+                      { name: "Zumba", emoji: "💃" },
+                      { name: "Afro Dance", emoji: "🥁" },
+                      { name: "Dance Fitness", emoji: "⚡" },
+                      { name: "Salsa", emoji: "🌶️" },
+                      { name: "Bachata", emoji: "🎶" },
+                      { name: "Hip-Hop", emoji: "🎤" },
+                      { name: "Dance Workout", emoji: "💪" },
+                    ].map((dance) => (
+                        <Badge
+                            key={dance.name}
+                            onClick={() => toggleSport(dance.name)}
+                            className={`cursor-pointer px-4 py-2 text-sm border ${
+                                (profile.sports || []).includes(dance.name)
+                                ? 'bg-orange-900/30 border-orange-500 text-orange-400'
+                                : 'bg-black/40 border-gray-700 text-gray-400 hover:border-gray-500'
+                            }`}
+                        >
+                            {dance.emoji} {dance.name}
+                        </Badge>
+                    ))}
+                </div>
+
+                {/* Niveau de danse */}
+                {(profile.sports || []).some((s: string) => ["Afroboost", "Zumba", "Afro Dance", "Dance Fitness", "Salsa", "Bachata", "Hip-Hop", "Dance Workout"].includes(s)) && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm text-gray-400">Niveau de danse</p>
+                    <div className="flex gap-2">
+                      {[
+                        { level: "debutant", label: "Débutant", emoji: "🌱" },
+                        { level: "intermediaire", label: "Intermédiaire", emoji: "⭐" },
+                        { level: "avance", label: "Avancé", emoji: "🏆" },
+                      ].map((lvl) => (
+                        <Badge
+                          key={lvl.level}
+                          onClick={() => setProfile({ ...profile, danceLevel: lvl.level })}
+                          className={`cursor-pointer px-4 py-2 text-sm border ${
+                            profile.danceLevel === lvl.level
+                              ? 'bg-fuchsia-900/30 border-fuchsia-500 text-fuchsia-400'
+                              : 'bg-black/40 border-gray-700 text-gray-400 hover:border-gray-500'
+                          }`}
+                        >
+                          {lvl.emoji} {lvl.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Toggle "Aime la danse" */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    onClick={() => setProfile({ ...profile, likesDancing: !profile.likesDancing })}
+                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${
+                      profile.likesDancing
+                        ? 'bg-gradient-to-r from-orange-500/20 to-rose-500/20 border-orange-500 text-orange-300'
+                        : 'bg-black/40 border-gray-700 text-gray-500 hover:border-gray-500'
+                    }`}
+                  >
+                    {profile.likesDancing ? '💃 J\'aime la danse !' : '🤔 J\'aime la danse ?'}
+                  </button>
                 </div>
             </CardContent>
         </Card>
